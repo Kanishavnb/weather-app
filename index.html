@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weather App</title>
+<style>
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: Arial, sans-serif;
+    background: linear-gradient(160deg, #1a2b5f, #3b5bdb);
+    color: #1a1a1a;
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+    box-sizing: border-box;
+  }
+  .app {
+    background: #f0f4ff;
+    width: 100%;
+    max-width: 420px;
+    border-radius: 14px;
+    padding: 20px;
+    text-align: center;
+    align-self: flex-start;
+  }
+  h1 { color: #1a2b5f; margin-top: 0; }
+  .search { display: flex; gap: 8px; }
+  input {
+    flex: 1;
+    padding: 10px;
+    font-size: 16px;
+    border: 1px solid #aab4d4;
+    border-radius: 8px;
+    min-width: 0;
+  }
+  button {
+    background: #1a2b5f;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 16px;
+    cursor: pointer;
+  }
+  .small { margin-top: 10px; padding: 6px 12px; font-size: 14px; background: #3b5bdb; }
+  #status { color: #b00020; min-height: 22px; margin: 12px 0; }
+  .now {
+    background: white;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .place { font-size: 18px; font-weight: bold; color: #1a2b5f; }
+  .temp { font-size: 48px; font-weight: bold; margin: 6px 0; }
+  .desc { font-size: 18px; }
+  .wind { color: #555; margin-top: 4px; }
+  .days { display: flex; gap: 6px; justify-content: space-between; }
+  .day {
+    flex: 1;
+    background: white;
+    border-radius: 10px;
+    padding: 8px 2px;
+    font-size: 13px;
+  }
+  .day .name { font-weight: bold; color: #1a2b5f; }
+  .day .hi { font-weight: bold; }
+  .day .lo { color: #666; }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>Weather App</h1>
+  <div class="search">
+    <input id="cityInput" placeholder="Enter a city, e.g. Chennai">
+    <button id="searchBtn">Search</button>
+  </div>
+  <button id="unitBtn" class="small">Show &deg;F</button>
+  <p id="status"></p>
+  <div id="result"></div>
+</div>
+
+<script>
+  var cityInput = document.getElementById("cityInput");
+  var statusBox = document.getElementById("status");
+  var resultBox = document.getElementById("result");
+  var unitBtn = document.getElementById("unitBtn");
+
+  var unit = localStorage.getItem("unit") || "celsius";
+  var lastPlace = null;
+
+  function unitSymbol() {
+    return unit === "fahrenheit" ? "\u00B0F" : "\u00B0C";
+  }
+
+  function updateUnitButton() {
+    unitBtn.textContent = unit === "fahrenheit" ? "Show \u00B0C" : "Show \u00B0F";
+  }
+
+  function setStatus(text) {
+    statusBox.textContent = text;
+  }
+
+  function weatherText(code) {
+    if (code === 0) return "Clear sky";
+    if (code <= 3) return "Partly cloudy";
+    if (code === 45 || code === 48) return "Fog";
+    if (code >= 51 && code <= 57) return "Drizzle";
+    if (code >= 61 && code <= 67) return "Rain";
+    if (code >= 71 && code <= 77) return "Snow";
+    if (code >= 80 && code <= 82) return "Rain showers";
+    if (code === 85 || code === 86) return "Snow showers";
+    if (code >= 95) return "Thunderstorm";
+    return "Unknown";
+  }
+
+  function makeEl(tag, className, text) {
+    var el = document.createElement(tag);
+    if (className) el.className = className;
+    if (text !== undefined) el.textContent = text;
+    return el;
+  }
+
+  function showWeather(data) {
+    resultBox.innerHTML = "";
+
+    var now = makeEl("div", "now");
+    now.appendChild(makeEl("div", "place", lastPlace.label));
+    now.appendChild(makeEl("div", "temp", Math.round(data.current.temperature_2m) + unitSymbol()));
+    now.appendChild(makeEl("div", "desc", weatherText(data.current.weather_code)));
+    now.appendChild(makeEl("div", "wind", "Wind: " + data.current.wind_speed_10m + " km/h"));
+    resultBox.appendChild(now);
+
+    var days = makeEl("div", "days");
+    for (var i = 0; i < data.daily.time.length; i++) {
+      var date = new Date(data.daily.time[i] + "T00:00:00");
+      var day = makeEl("div", "day");
+      day.appendChild(makeEl("div", "name", date.toLocaleDateString("en-US", { weekday: "short" })));
+      day.appendChild(makeEl("div", "", weatherText(data.daily.weather_code[i])));
+      day.appendChild(makeEl("div", "hi", Math.round(data.daily.temperature_2m_max[i]) + "\u00B0"));
+      day.appendChild(makeEl("div", "lo", Math.round(data.daily.temperature_2m_min[i]) + "\u00B0"));
+      days.appendChild(day);
+    }
+    resultBox.appendChild(days);
+  }
+
+  async function loadWeather() {
+    var url = "https://api.open-meteo.com/v1/forecast" +
+      "?latitude=" + lastPlace.latitude +
+      "&longitude=" + lastPlace.longitude +
+      "&current=temperature_2m,wind_speed_10m,weather_code" +
+      "&daily=weather_code,temperature_2m_max,temperature_2m_min" +
+      "&forecast_days=5&timezone=auto&temperature_unit=" + unit;
+
+    var response = await fetch(url);
+    if (!response.ok) {
+      throw new Error("Weather request failed");
+    }
+    var data = await response.json();
+    showWeather(data);
+    setStatus("");
+  }
+
+  async function searchCity() {
+    var city = cityInput.value.trim();
+    if (city === "") {
+      setStatus("Please type a city name.");
+      return;
+    }
+
+    setStatus("Searching...");
+    resultBox.innerHTML = "";
+
+    try {
+      var geoUrl = "https://geocoding-api.open-meteo.com/v1/search?count=1&name=" + encodeURIComponent(city);
+      var geoResponse = await fetch(geoUrl);
+      if (!geoResponse.ok) {
+        throw new Error("Search failed");
+      }
+      var geo = await geoResponse.json();
+
+      if (!geo.results || geo.results.length === 0) {
+        setStatus('No city found for "' + city + '".');
+        return;
+      }
+
+      var p = geo.results[0];
+      lastPlace = {
+        label: p.name + (p.admin1 ? ", " + p.admin1 : "") + ", " + p.country,
+        latitude: p.latitude,
+        longitude: p.longitude
+      };
+      localStorage.setItem("lastCity", city);
+
+      setStatus("Loading weather...");
+      await loadWeather();
+    } catch (error) {
+      setStatus("Something went wrong. Check your internet and try again.");
+    }
+  }
+
+  async function toggleUnit() {
+    unit = unit === "fahrenheit" ? "celsius" : "fahrenheit";
+    localStorage.setItem("unit", unit);
+    updateUnitButton();
+    if (lastPlace) {
+      try {
+        await loadWeather();
+      } catch (error) {
+        setStatus("Something went wrong. Check your internet and try again.");
+      }
+    }
+  }
+
+  document.getElementById("searchBtn").addEventListener("click", searchCity);
+  unitBtn.addEventListener("click", toggleUnit);
+  cityInput.addEventListener("keydown", function (event) {
+    if (event.key === "Enter") {
+      searchCity();
+    }
+  });
+
+  updateUnitButton();
+  var savedCity = localStorage.getItem("lastCity");
+  if (savedCity) {
+    cityInput.value = savedCity;
+    searchCity();
+  }
+</script>
+</body>
+</html>
